@@ -1,0 +1,340 @@
+name: Deploy OpenHands (new VPC + Route53)
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: "AWS region principal para el despliegue"
+        required: true
+        default: "us-east-1"
+        type: string
+      domain_name:
+        description: "Dominio para Route 53 y OpenHands (ej. example.com)"
+        required: true
+        type: string
+      sub_domain:
+        description: "Subdominio de OpenHands"
+        required: true
+        default: "openhands"
+        type: string
+      node_version:
+        description: "Versión de Node.js"
+        required: true
+        default: "20.4.0"
+        type: string
+      role_to_assume:
+        description: "ARN del rol IAM a asumir (OIDC). Déjalo vacío si usarás access keys"
+        required: false
+        default: ""
+        type: string
+      vpc_cidr:
+        description: "CIDR de la nueva VPC"
+        required: true
+        default: "10.42.0.0/16"
+        type: string
+      public_subnet_a_cidr:
+        description: "CIDR subnet pública A"
+        required: true
+        default: "10.42.0.0/24"
+        type: string
+      public_subnet_b_cidr:
+        description: "CIDR subnet pública B"
+        required: true
+        default: "10.42.1.0/24"
+        type: string
+      private_subnet_a_cidr:
+        description: "CIDR subnet privada A"
+        required: true
+        default: "10.42.10.0/24"
+        type: string
+      private_subnet_b_cidr:
+        description: "CIDR subnet privada B"
+        required: true
+        default: "10.42.11.0/24"
+        type: string
+      auth_callback_domains:
+        description: "OAuth callback domains (JSON array o coma-separado)"
+        required: false
+        default: ""
+        type: string
+      auth_domain_prefix_suffix:
+        description: "Sufijo del dominio Cognito"
+        required: false
+        default: "shared"
+        type: string
+      edge_stack_suffix:
+        description: "Sufijo para Edge stack"
+        required: false
+        default: ""
+        type: string
+      sandbox_aws_access:
+        description: "Habilitar acceso AWS en sandbox"
+        required: false
+        default: false
+        type: boolean
+      sandbox_aws_policy_file:
+        description: "Ruta de policy JSON para sandbox"
+        required: false
+        default: "config/sandbox-aws-policy.json"
+        type: string
+      skip_s3_endpoint:
+        description: "Saltar endpoint S3 (si ya existe en VPC)"
+        required: false
+        default: false
+        type: boolean
+      warm_pool_size:
+        description: "Cantidad de sandboxes pre-calentados"
+        required: false
+        default: "2"
+        type: string
+      idle_timeout_minutes:
+        description: "Timeout idle sandbox (minutos)"
+        required: false
+        default: "30"
+        type: string
+      sandbox_soci_image_uri:
+        description: "URI de imagen SOCI v2 opcional"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ inputs.aws_region }}
+      DOMAIN_NAME: ${{ inputs.domain_name }}
+      SUB_DOMAIN: ${{ inputs.sub_domain }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install awscli + docker + jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli docker.io jq
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ inputs.role_to_assume != '' }}
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: ${{ inputs.role_to_assume == '' }}
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Verify toolchain
+        run: |
+          aws --version
+          docker --version
+          node --version
+          npm --version
+          npx --version
+          uv --version
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Create network (VPC + NAT + DNS)
+        id: network
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AZ1=$(aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[0].ZoneName' --output text)
+          AZ2=$(aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[1].ZoneName' --output text)
+
+          VPC_ID=$(aws ec2 create-vpc \
+            --region "$AWS_REGION" \
+            --cidr-block "${{ inputs.vpc_cidr }}" \
+            --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=openhands-vpc}]' \
+            --query 'Vpc.VpcId' --output text)
+
+          aws ec2 wait vpc-available --region "$AWS_REGION" --vpc-ids "$VPC_ID"
+          aws ec2 modify-vpc-attribute --region "$AWS_REGION" --vpc-id "$VPC_ID" --enable-dns-support '{"Value":true}'
+          aws ec2 modify-vpc-attribute --region "$AWS_REGION" --vpc-id "$VPC_ID" --enable-dns-hostnames '{"Value":true}'
+
+          IGW_ID=$(aws ec2 create-internet-gateway \
+            --region "$AWS_REGION" \
+            --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=openhands-igw}]' \
+            --query 'InternetGateway.InternetGatewayId' --output text)
+          aws ec2 attach-internet-gateway --region "$AWS_REGION" --vpc-id "$VPC_ID" --internet-gateway-id "$IGW_ID"
+
+          PUBLIC_SUBNET_A=$(aws ec2 create-subnet \
+            --region "$AWS_REGION" \
+            --vpc-id "$VPC_ID" \
+            --cidr-block "${{ inputs.public_subnet_a_cidr }}" \
+            --availability-zone "$AZ1" \
+            --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=openhands-public-a}]' \
+            --query 'Subnet.SubnetId' --output text)
+
+          PUBLIC_SUBNET_B=$(aws ec2 create-subnet \
+            --region "$AWS_REGION" \
+            --vpc-id "$VPC_ID" \
+            --cidr-block "${{ inputs.public_subnet_b_cidr }}" \
+            --availability-zone "$AZ2" \
+            --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=openhands-public-b}]' \
+            --query 'Subnet.SubnetId' --output text)
+
+          PRIVATE_SUBNET_A=$(aws ec2 create-subnet \
+            --region "$AWS_REGION" \
+            --vpc-id "$VPC_ID" \
+            --cidr-block "${{ inputs.private_subnet_a_cidr }}" \
+            --availability-zone "$AZ1" \
+            --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=openhands-private-a}]' \
+            --query 'Subnet.SubnetId' --output text)
+
+          PRIVATE_SUBNET_B=$(aws ec2 create-subnet \
+            --region "$AWS_REGION" \
+            --vpc-id "$VPC_ID" \
+            --cidr-block "${{ inputs.private_subnet_b_cidr }}" \
+            --availability-zone "$AZ2" \
+            --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=openhands-private-b}]' \
+            --query 'Subnet.SubnetId' --output text)
+
+          aws ec2 modify-subnet-attribute --region "$AWS_REGION" --subnet-id "$PUBLIC_SUBNET_A" --map-public-ip-on-launch
+          aws ec2 modify-subnet-attribute --region "$AWS_REGION" --subnet-id "$PUBLIC_SUBNET_B" --map-public-ip-on-launch
+
+          PUBLIC_RT=$(aws ec2 create-route-table \
+            --region "$AWS_REGION" \
+            --vpc-id "$VPC_ID" \
+            --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=openhands-public-rt}]' \
+            --query 'RouteTable.RouteTableId' --output text)
+
+          aws ec2 create-route --region "$AWS_REGION" --route-table-id "$PUBLIC_RT" --destination-cidr-block 0.0.0.0/0 --gateway-id "$IGW_ID"
+          aws ec2 associate-route-table --region "$AWS_REGION" --route-table-id "$PUBLIC_RT" --subnet-id "$PUBLIC_SUBNET_A"
+          aws ec2 associate-route-table --region "$AWS_REGION" --route-table-id "$PUBLIC_RT" --subnet-id "$PUBLIC_SUBNET_B"
+
+          EIP_ALLOC_ID=$(aws ec2 allocate-address --region "$AWS_REGION" --domain vpc --query 'AllocationId' --output text)
+          NAT_GW_ID=$(aws ec2 create-nat-gateway \
+            --region "$AWS_REGION" \
+            --subnet-id "$PUBLIC_SUBNET_A" \
+            --allocation-id "$EIP_ALLOC_ID" \
+            --tag-specifications 'ResourceType=natgateway,Tags=[{Key=Name,Value=openhands-nat}]' \
+            --query 'NatGateway.NatGatewayId' --output text)
+
+          aws ec2 wait nat-gateway-available --region "$AWS_REGION" --nat-gateway-ids "$NAT_GW_ID"
+
+          PRIVATE_RT=$(aws ec2 create-route-table \
+            --region "$AWS_REGION" \
+            --vpc-id "$VPC_ID" \
+            --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=openhands-private-rt}]' \
+            --query 'RouteTable.RouteTableId' --output text)
+
+          aws ec2 create-route --region "$AWS_REGION" --route-table-id "$PRIVATE_RT" --destination-cidr-block 0.0.0.0/0 --nat-gateway-id "$NAT_GW_ID"
+          aws ec2 associate-route-table --region "$AWS_REGION" --route-table-id "$PRIVATE_RT" --subnet-id "$PRIVATE_SUBNET_A"
+          aws ec2 associate-route-table --region "$AWS_REGION" --route-table-id "$PRIVATE_RT" --subnet-id "$PRIVATE_SUBNET_B"
+
+          {
+            echo "vpc_id=$VPC_ID"
+            echo "public_subnet_a=$PUBLIC_SUBNET_A"
+            echo "public_subnet_b=$PUBLIC_SUBNET_B"
+            echo "private_subnet_a=$PRIVATE_SUBNET_A"
+            echo "private_subnet_b=$PRIVATE_SUBNET_B"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create / resolve Route 53 hosted zone
+        id: hosted_zone
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DOMAIN_WITH_DOT="${DOMAIN_NAME}."
+          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
+            --dns-name "$DOMAIN_WITH_DOT" \
+            --query "HostedZones[?Name=='$DOMAIN_WITH_DOT'] | [0].Id" \
+            --output text)
+
+          if [[ -z "$HOSTED_ZONE_ID" || "$HOSTED_ZONE_ID" == "None" ]]; then
+            HOSTED_ZONE_ID=$(aws route53 create-hosted-zone \
+              --name "$DOMAIN_NAME" \
+              --caller-reference "openhands-${{ github.run_id }}-${{ github.run_attempt }}" \
+              --hosted-zone-config Comment='OpenHands hosted zone',PrivateZone=false \
+              --query 'HostedZone.Id' --output text)
+          fi
+
+          HOSTED_ZONE_ID="${HOSTED_ZONE_ID#/hostedzone/}"
+          echo "hosted_zone_id=$HOSTED_ZONE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap CDK (main region)
+        run: npx cdk bootstrap --region "$AWS_REGION"
+
+      - name: Bootstrap CDK (us-east-1 for Edge)
+        run: npx cdk bootstrap --region us-east-1
+
+      - name: Ensure sandbox secret exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if aws secretsmanager describe-secret --region "$AWS_REGION" --secret-id openhands/sandbox-secret-key >/dev/null 2>&1; then
+            echo "Secret already exists in $AWS_REGION"
+          else
+            aws secretsmanager create-secret \
+              --name openhands/sandbox-secret-key \
+              --secret-string "$(openssl rand -base64 32)" \
+              --region "$AWS_REGION" \
+              --description "OpenHands sandbox secret key for session encryption"
+          fi
+
+      - name: Deploy CDK stacks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CMD=(
+            npx cdk deploy --all
+            --context "vpcId=${{ steps.network.outputs.vpc_id }}"
+            --context "hostedZoneId=${{ steps.hosted_zone.outputs.hosted_zone_id }}"
+            --context "domainName=${{ inputs.domain_name }}"
+            --context "subDomain=${{ inputs.sub_domain }}"
+            --context "region=${{ inputs.aws_region }}"
+            --context "authDomainPrefixSuffix=${{ inputs.auth_domain_prefix_suffix }}"
+            --context "sandboxAwsAccess=${{ inputs.sandbox_aws_access }}"
+            --context "sandboxAwsPolicyFile=${{ inputs.sandbox_aws_policy_file }}"
+            --context "skipS3Endpoint=${{ inputs.skip_s3_endpoint }}"
+            --context "warmPoolSize=${{ inputs.warm_pool_size }}"
+            --context "idleTimeoutMinutes=${{ inputs.idle_timeout_minutes }}"
+            --require-approval never
+          )
+
+          if [[ -n "${{ inputs.auth_callback_domains }}" ]]; then
+            CMD+=(--context "authCallbackDomains=${{ inputs.auth_callback_domains }}")
+          fi
+
+          if [[ -n "${{ inputs.edge_stack_suffix }}" ]]; then
+            CMD+=(--context "edgeStackSuffix=${{ inputs.edge_stack_suffix }}")
+          fi
+
+          if [[ -n "${{ inputs.sandbox_soci_image_uri }}" ]]; then
+            CMD+=(--context "sandboxSociImageUri=${{ inputs.sandbox_soci_image_uri }}")
+          fi
+
+          "${CMD[@]}"
+
+      - name: Deployment summary
+        run: |
+          echo "OpenHands URL: https://${{ inputs.sub_domain }}.${{ inputs.domain_name }}"
+          echo "VPC ID: ${{ steps.network.outputs.vpc_id }}"
+          echo "Hosted Zone ID: ${{ steps.hosted_zone.outputs.hosted_zone_id }}"
