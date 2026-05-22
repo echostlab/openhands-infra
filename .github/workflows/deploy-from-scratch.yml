@@ -9,8 +9,9 @@ on:
         default: "us-east-1"
         type: string
       domain_name:
-        description: "Dominio para Route 53 y OpenHands (ej. example.com)"
+        description: "Dominio para Route 53 y OpenHands (ej. echosmart.me)"
         required: true
+        default: "echosmart.me"
         type: string
       sub_domain:
         description: "Subdominio de OpenHands"
@@ -55,7 +56,7 @@ on:
       auth_callback_domains:
         description: "OAuth callback domains (JSON array o coma-separado)"
         required: false
-        default: ""
+        default: '["openhands.echosmart.me"]'
         type: string
       auth_domain_prefix_suffix:
         description: "Sufijo del dominio Cognito"
