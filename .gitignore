@@ -45,3 +45,6 @@ __pycache__/
 # Sandbox Orchestrator build artifacts
 services/sandbox-orchestrator/dist/
 services/sandbox-orchestrator/node_modules/
+# Gradle
+package-lock.json
+node_modules/
