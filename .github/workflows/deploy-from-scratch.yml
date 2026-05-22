@@ -184,8 +184,6 @@ jobs:
           npm install
           npm install --no-save aws-cdk ts-node typescript @types/node source-map-support
 
-      - name: Build project
-        run: npm run build
 
       - name: Resolve or create network (VPC + NAT)
         id: network
