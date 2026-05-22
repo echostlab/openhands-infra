@@ -583,7 +583,7 @@ jobs:
           fi
 
           CMD=(
-            npx cdk deploy --all --exclusively
+            npx cdk deploy --exclusively
             --context "vpcId=${{ steps.network.outputs.vpc_id }}"
             --context "hostedZoneId=${{ steps.hosted_zone.outputs.hosted_zone_id }}"
             --context "domainName=${{ inputs.domain_name }}"
