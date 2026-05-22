@@ -414,6 +414,7 @@ export class SandboxStack extends cdk.Stack {
       cluster,
       serviceName: `${namePrefix}-sandbox-warm-pool`,
       taskDefinition: sandboxTaskDefinition,
+      circuitBreaker: { rollback: true },
       desiredCount: warmPoolSize,
       minHealthyPercent: 0,    // Allow all tasks to be replaced during deployments
       maxHealthyPercent: 200,  // Allow temporary doubling during rolling update
@@ -575,6 +576,7 @@ export class SandboxStack extends cdk.Stack {
       cluster,
       serviceName: `${namePrefix}-sandbox-orchestrator`,
       taskDefinition: orchestratorTaskDef,
+      circuitBreaker: { rollback: true },
       desiredCount: 1,
       minHealthyPercent: 100,
       maxHealthyPercent: 200,
@@ -722,8 +724,28 @@ export class SandboxStack extends cdk.Stack {
     const lifecycleLambdaSg = new ec2.SecurityGroup(this, 'LifecycleLambdaSg', {
       vpc,
       description: 'Security group for conversation lifecycle Lambdas (archival/deletion)',
-      allowAllOutbound: true,
+      allowAllOutbound: false,
     });
+    lifecycleLambdaSg.addEgressRule(
+      workspaceEfsSg,
+      ec2.Port.tcp(2049),
+      'Allow NFS to workspace EFS'
+    );
+    lifecycleLambdaSg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'Allow HTTPS egress'
+    );
+    lifecycleLambdaSg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.udp(53),
+      'Allow DNS UDP egress'
+    );
+    lifecycleLambdaSg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(53),
+      'Allow DNS TCP egress'
+    );
     // Allow NFS from lifecycle Lambdas to EFS
     workspaceEfsSg.addIngressRule(
       lifecycleLambdaSg,

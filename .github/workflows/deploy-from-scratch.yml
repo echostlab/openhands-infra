@@ -110,7 +110,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     env:
       AWS_REGION: ${{ inputs.aws_region }}
       DOMAIN_NAME: ${{ inputs.domain_name }}
@@ -137,11 +137,6 @@ jobs:
               }
             }
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -159,7 +154,7 @@ jobs:
         with:
           version: 2
           verbose: false
-          arch: amd64
+          arch: arm64
 
       - name: Configure AWS credentials (OIDC)
         if: ${{ inputs.role_to_assume != '' }}
@@ -506,6 +501,10 @@ jobs:
 
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           APP_CMD="npx ts-node --prefer-ts-exts bin/openhands-infra.ts"
+          AUTH_CALLBACK_DOMAINS='${{ inputs.auth_callback_domains }}'
+          if [[ -z "$AUTH_CALLBACK_DOMAINS" ]]; then
+            AUTH_CALLBACK_DOMAINS='${{ inputs.sub_domain }}.${{ inputs.domain_name }}'
+          fi
 
           npx cdk bootstrap "aws://${ACCOUNT_ID}/${AWS_REGION}" \
             --app "$APP_CMD" \
@@ -513,7 +512,8 @@ jobs:
             --context "hostedZoneId=${{ steps.hosted_zone.outputs.hosted_zone_id }}" \
             --context "domainName=${{ inputs.domain_name }}" \
             --context "subDomain=${{ inputs.sub_domain }}" \
-            --context "region=${{ inputs.aws_region }}"
+            --context "region=${{ inputs.aws_region }}" \
+            --context "authCallbackDomains=${AUTH_CALLBACK_DOMAINS}"
 
       - name: Bootstrap CDK (us-east-1 for Edge)
         shell: bash
@@ -522,6 +522,10 @@ jobs:
 
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           APP_CMD="npx ts-node --prefer-ts-exts bin/openhands-infra.ts"
+          AUTH_CALLBACK_DOMAINS='${{ inputs.auth_callback_domains }}'
+          if [[ -z "$AUTH_CALLBACK_DOMAINS" ]]; then
+            AUTH_CALLBACK_DOMAINS='${{ inputs.sub_domain }}.${{ inputs.domain_name }}'
+          fi
 
           npx cdk bootstrap "aws://${ACCOUNT_ID}/us-east-1" \
             --app "$APP_CMD" \
@@ -529,7 +533,8 @@ jobs:
             --context "hostedZoneId=${{ steps.hosted_zone.outputs.hosted_zone_id }}" \
             --context "domainName=${{ inputs.domain_name }}" \
             --context "subDomain=${{ inputs.sub_domain }}" \
-            --context "region=us-east-1"
+            --context "region=us-east-1" \
+            --context "authCallbackDomains=${AUTH_CALLBACK_DOMAINS}"
 
       - name: Ensure sandbox secret exists
         shell: bash
@@ -551,8 +556,34 @@ jobs:
         run: |
           set -euo pipefail
 
+          stack_exists() {
+            local stack_name="$1"
+            aws cloudformation describe-stacks \
+              --region "$AWS_REGION" \
+              --stack-name "$stack_name" >/dev/null 2>&1
+          }
+
+          STACKS=(
+            OpenHands-Monitoring
+            OpenHands-Security
+            OpenHands-Database
+            OpenHands-UserConfig
+            OpenHands-Cluster
+            OpenHands-Sandbox
+            OpenHands-Compute
+            OpenHands-Edge
+          )
+
+          if ! stack_exists "OpenHands-Network"; then
+            STACKS=(OpenHands-Network "${STACKS[@]}")
+          fi
+
+          if ! stack_exists "OpenHands-Auth"; then
+            STACKS+=(OpenHands-Auth)
+          fi
+
           CMD=(
-            npx cdk deploy --all
+            npx cdk deploy --all --exclusively
             --context "vpcId=${{ steps.network.outputs.vpc_id }}"
             --context "hostedZoneId=${{ steps.hosted_zone.outputs.hosted_zone_id }}"
             --context "domainName=${{ inputs.domain_name }}"
@@ -566,6 +597,8 @@ jobs:
             --context "idleTimeoutMinutes=${{ inputs.idle_timeout_minutes }}"
             --require-approval never
           )
+
+          CMD+=("${STACKS[@]}")
 
           AUTH_CALLBACK_DOMAINS='${{ inputs.auth_callback_domains }}'
           if [[ -z "$AUTH_CALLBACK_DOMAINS" ]]; then
