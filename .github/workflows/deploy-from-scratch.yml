@@ -120,14 +120,33 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
           cache: npm
+          
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v5
+        with:
+          daemon-config: |
+            {
+              "debug": true,
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
-      - name: Install awscli + docker + jq
+      - name: Install awscli  jq
         run: |
           sudo apt-get update
-          sudo apt-get install -y awscli docker.io jq
+          sudo apt-get install -y  jq curl
+          
+      - name: Install awscli
+        id: install-aws-cli
+        uses: unfor19/install-aws-cli-action@v1
+        with:
+         version: 2                         # default
+         verbose: false                     # default
+         arch: amd64                        # allowed values: amd64, x86, x64, arm, arm64
 
       - name: Configure AWS credentials (OIDC)
         if: ${{ inputs.role_to_assume != '' }}
