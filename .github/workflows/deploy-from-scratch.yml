@@ -56,7 +56,7 @@ on:
       auth_callback_domains:
         description: "OAuth callback domains (JSON array o coma-separado)"
         required: false
-        default: '["openhands.echosmart.me"]'
+        default: "openhands.echosmart.me"
         type: string
       auth_domain_prefix_suffix:
         description: "Sufijo del dominio Cognito"
@@ -567,9 +567,11 @@ jobs:
             --require-approval never
           )
 
-          if [[ -n "${{ inputs.auth_callback_domains }}" ]]; then
-            CMD+=(--context "authCallbackDomains=${{ inputs.auth_callback_domains }}")
+          AUTH_CALLBACK_DOMAINS='${{ inputs.auth_callback_domains }}'
+          if [[ -z "$AUTH_CALLBACK_DOMAINS" ]]; then
+            AUTH_CALLBACK_DOMAINS='${{ inputs.sub_domain }}.${{ inputs.domain_name }}'
           fi
+          CMD+=(--context "authCallbackDomains=${AUTH_CALLBACK_DOMAINS}")
 
           if [[ -n "${{ inputs.edge_stack_suffix }}" ]]; then
             CMD+=(--context "edgeStackSuffix=${{ inputs.edge_stack_suffix }}")
