@@ -189,7 +189,7 @@ jobs:
           SHOULD_RUN="false"
           RUN_KIND="none"
 
-          FULL_MODEL="$(resolve_model "gpt-5.3-codex)"
+          FULL_MODEL="$(resolve_model "gpt-5.3-codex")"
           SELECTED_AGENT=""
           SELECTED_VARIANT=""
           SELECTED_SHARE=""
