@@ -47,7 +47,7 @@ jobs:
           TRUSTED_AUTHOR_ASSOCIATIONS: OWNER,MEMBER,COLLABORATOR
           ALLOWED_AGENT_OVERRIDES: build,plan,reviewer
           ALLOWED_VARIANT_OVERRIDES: default
-          ALLOWED_MODEL_OVERRIDES: gpt-5.3-codex,gpt-5.4-pro
+          ALLOWED_MODEL_OVERRIDES: gpt-5.3-codex,gpt-5.3-codex
 
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
 
           resolve_model() {
-            local input="${1:-gpt-5.4-pro}"
+            local input="${1:-gpt-5.3-codex}"
             local normalized=""
 
             normalized="${input##azure-foundry/}"
@@ -189,7 +189,7 @@ jobs:
           SHOULD_RUN="false"
           RUN_KIND="none"
 
-          FULL_MODEL="$(resolve_model "gpt-5.4-pro")"
+          FULL_MODEL="$(resolve_model "gpt-5.3-codex)"
           SELECTED_AGENT=""
           SELECTED_VARIANT=""
           SELECTED_SHARE=""
