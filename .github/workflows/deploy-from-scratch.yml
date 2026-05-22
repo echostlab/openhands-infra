@@ -66,7 +66,7 @@ on:
       edge_stack_suffix:
         description: "Sufijo para Edge stack"
         required: false
-        default: ""
+        default: "shared"
         type: string
       sandbox_aws_access:
         description: "Habilitar acceso AWS en sandbox"
