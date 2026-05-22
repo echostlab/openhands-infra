@@ -52,6 +52,8 @@ export interface SandboxStackProps extends cdk.StackProps {
   databaseName?: string;
   /** SOCI-enabled sandbox image URI (overrides CDK-built image for Fargate lazy loading) */
   sandboxSociImageUri?: string;
+  /** Optional version suffix to force workspace EFS resource replacement (e.g., when VPC changes). */
+  workspaceEfsVersion?: string;
 }
 
 /**
@@ -151,7 +153,16 @@ export class SandboxStack extends cdk.Stack {
     // ========================================
     // Shared by all Fargate sandbox tasks. Each task mounts EFS at /mnt/efs and
     // creates /mnt/efs/<CONVERSATION_ID>/ → symlinked to /workspace in the entrypoint.
-    const workspaceEfsSg = new ec2.SecurityGroup(this, 'WorkspaceEfsSg', {
+    const workspaceEfsIdSuffix = props.workspaceEfsVersion
+      ? props.workspaceEfsVersion.replace(/[^A-Za-z0-9]/g, '')
+      : '';
+    const workspaceEfsSgId = workspaceEfsIdSuffix ? `WorkspaceEfsSg${workspaceEfsIdSuffix}` : 'WorkspaceEfsSg';
+    const workspaceEfsId = workspaceEfsIdSuffix ? `WorkspaceEfs${workspaceEfsIdSuffix}` : 'WorkspaceEfs';
+    const workspaceAccessPointId = workspaceEfsIdSuffix
+      ? `WorkspaceAccessPoint${workspaceEfsIdSuffix}`
+      : 'WorkspaceAccessPoint';
+
+    const workspaceEfsSg = new ec2.SecurityGroup(this, workspaceEfsSgId, {
       vpc,
       description: 'Security group for sandbox workspace EFS',
       allowAllOutbound: false,
@@ -163,7 +174,7 @@ export class SandboxStack extends cdk.Stack {
       'Allow NFS from sandbox Fargate tasks'
     );
 
-    const workspaceFileSystem = new efs.FileSystem(this, 'WorkspaceEfs', {
+    const workspaceFileSystem = new efs.FileSystem(this, workspaceEfsId, {
       vpc,
       vpcSubnets: vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }),
       securityGroup: workspaceEfsSg,
@@ -175,7 +186,7 @@ export class SandboxStack extends cdk.Stack {
     });
     cdk.Tags.of(workspaceFileSystem).add('Component', 'sandbox-workspace');
 
-    const workspaceAccessPoint = new efs.AccessPoint(this, 'WorkspaceAccessPoint', {
+    const workspaceAccessPoint = new efs.AccessPoint(this, workspaceAccessPointId, {
       fileSystem: workspaceFileSystem,
       path: '/sandbox-workspace',
       posixUser: { uid: '1000', gid: '1000' },  // openhands user

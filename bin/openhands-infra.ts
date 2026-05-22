@@ -245,6 +245,7 @@ const conversationRetentionDays = parseInt(
 );
 
 const sandboxSociImageUri = getContextString('sandboxSociImageUri', undefined);
+const workspaceEfsVersion = getContextString('workspaceEfsVersion', undefined);
 
 const sandboxStack = new SandboxStack(app, `${prefix}-Sandbox`, {
   env: mainEnv,
@@ -258,6 +259,7 @@ const sandboxStack = new SandboxStack(app, `${prefix}-Sandbox`, {
   idleTimeoutMinutes,
   conversationRetentionDays,
   sandboxSociImageUri,
+  workspaceEfsVersion,
   dataBucket: monitoringStack.output.dataBucket,
   // Database info for deletion Lambda — uses well-known secret name to avoid
   // cyclic dependency (Sandbox → Database → Security → Sandbox via SG imports).

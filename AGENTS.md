@@ -39,6 +39,7 @@ npx cdk diff --all --context ...
 - `authCallbackDomains` - OAuth callback domains (JSON array or comma-separated)
 - `authDomainPrefixSuffix` - Cognito domain prefix suffix (default: "shared")
 - `sandboxSociImageUri` - SOCI v2 image URI for Fargate lazy loading (see [SOCI Optimization](#soci-image-optimization))
+- `workspaceEfsVersion` - Optional suffix for Workspace EFS construct IDs; bump to force fresh EFS resources after VPC migration (avoids EFS mount-target VPC mismatch 409)
 
 ### Prerequisites (First-Time Deployment)
 
