@@ -103,6 +103,11 @@ on:
         required: false
         default: ""
         type: string
+      workspace_efs_version:
+        description: "Versión opcional para forzar nuevos recursos EFS del workspace"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -556,12 +561,48 @@ jobs:
         run: |
           set -euo pipefail
 
+          is_empty_text() {
+            local value="${1:-}"
+            [[ -z "$value" || "$value" == "None" || "$value" == "null" ]]
+          }
+
           stack_exists() {
             local stack_name="$1"
             aws cloudformation describe-stacks \
               --region "$AWS_REGION" \
               --stack-name "$stack_name" >/dev/null 2>&1
           }
+
+          workspace_efs_version='${{ inputs.workspace_efs_version }}'
+
+          if is_empty_text "$workspace_efs_version" && stack_exists "OpenHands-Sandbox"; then
+            existing_efs_id=$(aws cloudformation list-stack-resources \
+              --region "$AWS_REGION" \
+              --stack-name OpenHands-Sandbox \
+              --query "StackResourceSummaries[?ResourceType=='AWS::EFS::FileSystem'][0].PhysicalResourceId" \
+              --output text 2>/dev/null || true)
+
+            if ! is_empty_text "$existing_efs_id"; then
+              existing_mount_target_subnet_id=$(aws efs describe-mount-targets \
+                --region "$AWS_REGION" \
+                --file-system-id "$existing_efs_id" \
+                --query 'MountTargets[0].SubnetId' \
+                --output text 2>/dev/null || true)
+
+              if ! is_empty_text "$existing_mount_target_subnet_id"; then
+                existing_efs_vpc_id=$(aws ec2 describe-subnets \
+                  --region "$AWS_REGION" \
+                  --subnet-ids "$existing_mount_target_subnet_id" \
+                  --query 'Subnets[0].VpcId' \
+                  --output text 2>/dev/null || true)
+
+                if ! is_empty_text "$existing_efs_vpc_id" && [[ "$existing_efs_vpc_id" != "${{ steps.network.outputs.vpc_id }}" ]]; then
+                  workspace_efs_version='${{ steps.network.outputs.vpc_id }}'
+                  echo "Detected EFS VPC mismatch (existing: $existing_efs_vpc_id, target: ${{ steps.network.outputs.vpc_id }}). Setting workspaceEfsVersion=$workspace_efs_version"
+                fi
+              fi
+            fi
+          fi
 
           STACKS=(
             OpenHands-Monitoring
@@ -612,6 +653,10 @@ jobs:
 
           if [[ -n "${{ inputs.sandbox_soci_image_uri }}" ]]; then
             CMD+=(--context "sandboxSociImageUri=${{ inputs.sandbox_soci_image_uri }}")
+          fi
+
+          if ! is_empty_text "$workspace_efs_version"; then
+            CMD+=(--context "workspaceEfsVersion=$workspace_efs_version")
           fi
 
           "${CMD[@]}"
