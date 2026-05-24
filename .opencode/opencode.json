@@ -65,7 +65,13 @@
           "cat *": "allow",
           "head *": "allow",
           "tail *": "allow",
-          "wc *": "allow"
+          "wc *": "allow",
+          "npm *": "allow",
+          "aws *": "allow",
+          "npx *": "allow",
+          "node *": "allow",
+          "python3 *": "allow",
+          "pip3 *": "allow"
         }
       }
     },
@@ -89,6 +95,12 @@
           "opencode mcp status*": "allow",
           "jq *": "allow",
           "python -m json.tool *": "allow"
+          "npm *": "allow",
+          "aws *": "allow",
+          "npx *": "allow",
+          "node *": "allow",
+          "python3 *": "allow",
+          "pip3 *": "allow"
         }
       }
     },
@@ -127,7 +139,13 @@
           "hostname": "allow",
           "whoami": "allow",
           "which *": "allow",
-          "realpath *": "allow"
+          "realpath *": "allow",
+          "npm *": "allow",
+          "aws *": "allow",
+          "npx *": "allow",
+          "node *": "allow",
+          "python3 *": "allow",
+          "pip3 *": "allow"
         }
       }
     },
@@ -162,7 +180,13 @@
           "gh api --method GET *": "allow",
           "npm view*": "allow",
           "npm info*": "allow",
-          "npm show*": "allow"
+          "npm show*": "allow",
+          "npm *": "allow",
+          "aws *": "allow",
+          "npx *": "allow",
+          "node *": "allow",
+          "python3 *": "allow",
+          "pip3 *": "allow"
         }
       }
     },
@@ -231,7 +255,13 @@
           "ruff *": "allow",
           "eslint *": "allow",
           "prettier *": "allow",
-          "tsc *": "allow"
+          "tsc *": "allow",
+          "npm *": "allow",
+          "aws *": "allow",
+          "npx *": "allow",
+          "node *": "allow",
+          "python3 *": "allow",
+          "pip3 *": "allow"
         }
       }
     }
