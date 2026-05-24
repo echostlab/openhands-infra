@@ -94,7 +94,7 @@
           "opencode mcp reload*": "allow",
           "opencode mcp status*": "allow",
           "jq *": "allow",
-          "python -m json.tool *": "allow"
+          "python -m json.tool *": "allow",
           "npm *": "allow",
           "aws *": "allow",
           "npx *": "allow",
