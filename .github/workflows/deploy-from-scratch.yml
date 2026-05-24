@@ -576,31 +576,79 @@ jobs:
           workspace_efs_version='${{ inputs.workspace_efs_version }}'
 
           if is_empty_text "$workspace_efs_version" && stack_exists "OpenHands-Sandbox"; then
-            existing_efs_id=$(aws cloudformation list-stack-resources \
+            existing_efs_vpc_id=""
+            efs_vpc_detection_source=""
+
+            workspace_efs_sg_ids=$(aws cloudformation list-stack-resources \
               --region "$AWS_REGION" \
               --stack-name OpenHands-Sandbox \
-              --query "StackResourceSummaries[?ResourceType=='AWS::EFS::FileSystem'][0].PhysicalResourceId" \
+              --query "StackResourceSummaries[?ResourceType=='AWS::EC2::SecurityGroup' && starts_with(LogicalResourceId, 'WorkspaceEfsSg')].PhysicalResourceId" \
               --output text 2>/dev/null || true)
 
-            if ! is_empty_text "$existing_efs_id"; then
-              existing_mount_target_subnet_id=$(aws efs describe-mount-targets \
-                --region "$AWS_REGION" \
-                --file-system-id "$existing_efs_id" \
-                --query 'MountTargets[0].SubnetId' \
-                --output text 2>/dev/null || true)
+            if ! is_empty_text "$workspace_efs_sg_ids"; then
+              sg_vpc_id_candidate=""
+              sg_lookup_inconclusive="false"
 
-              if ! is_empty_text "$existing_mount_target_subnet_id"; then
-                existing_efs_vpc_id=$(aws ec2 describe-subnets \
+              for workspace_efs_sg_id in $workspace_efs_sg_ids; do
+                sg_vpc_id=$(aws ec2 describe-security-groups \
                   --region "$AWS_REGION" \
-                  --subnet-ids "$existing_mount_target_subnet_id" \
-                  --query 'Subnets[0].VpcId' \
+                  --group-ids "$workspace_efs_sg_id" \
+                  --query 'SecurityGroups[0].VpcId' \
                   --output text 2>/dev/null || true)
 
-                if ! is_empty_text "$existing_efs_vpc_id" && [[ "$existing_efs_vpc_id" != "${{ steps.network.outputs.vpc_id }}" ]]; then
-                  workspace_efs_version='${{ steps.network.outputs.vpc_id }}'
-                  echo "Detected EFS VPC mismatch (existing: $existing_efs_vpc_id, target: ${{ steps.network.outputs.vpc_id }}). Setting workspaceEfsVersion=$workspace_efs_version"
+                if is_empty_text "$sg_vpc_id"; then
+                  continue
+                fi
+
+                if is_empty_text "$sg_vpc_id_candidate"; then
+                  sg_vpc_id_candidate="$sg_vpc_id"
+                elif [[ "$sg_vpc_id_candidate" != "$sg_vpc_id" ]]; then
+                  sg_lookup_inconclusive="true"
+                  break
+                fi
+              done
+
+              if [[ "$sg_lookup_inconclusive" == "false" ]] && ! is_empty_text "$sg_vpc_id_candidate"; then
+                existing_efs_vpc_id="$sg_vpc_id_candidate"
+                efs_vpc_detection_source="WorkspaceEfsSg security group"
+              else
+                echo "WorkspaceEfsSg VPC lookup inconclusive; falling back to EFS mount-target/subnet lookup"
+              fi
+            else
+              echo "WorkspaceEfsSg security group not found; falling back to EFS mount-target/subnet lookup"
+            fi
+
+            if is_empty_text "$existing_efs_vpc_id"; then
+              existing_efs_id=$(aws cloudformation list-stack-resources \
+                --region "$AWS_REGION" \
+                --stack-name OpenHands-Sandbox \
+                --query "StackResourceSummaries[?ResourceType=='AWS::EFS::FileSystem'][0].PhysicalResourceId" \
+                --output text 2>/dev/null || true)
+
+              if ! is_empty_text "$existing_efs_id"; then
+                existing_mount_target_subnet_id=$(aws efs describe-mount-targets \
+                  --region "$AWS_REGION" \
+                  --file-system-id "$existing_efs_id" \
+                  --query 'MountTargets[0].SubnetId' \
+                  --output text 2>/dev/null || true)
+
+                if ! is_empty_text "$existing_mount_target_subnet_id"; then
+                  existing_efs_vpc_id=$(aws ec2 describe-subnets \
+                    --region "$AWS_REGION" \
+                    --subnet-ids "$existing_mount_target_subnet_id" \
+                    --query 'Subnets[0].VpcId' \
+                    --output text 2>/dev/null || true)
+
+                  if ! is_empty_text "$existing_efs_vpc_id"; then
+                    efs_vpc_detection_source="EFS mount-target subnet"
+                  fi
                 fi
               fi
+            fi
+
+            if ! is_empty_text "$existing_efs_vpc_id" && [[ "$existing_efs_vpc_id" != "${{ steps.network.outputs.vpc_id }}" ]]; then
+              workspace_efs_version='${{ steps.network.outputs.vpc_id }}'
+              echo "Detected EFS VPC mismatch via $efs_vpc_detection_source (existing: $existing_efs_vpc_id, target: ${{ steps.network.outputs.vpc_id }}). Setting workspaceEfsVersion=$workspace_efs_version"
             fi
           fi
 
