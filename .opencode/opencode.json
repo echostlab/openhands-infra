@@ -38,7 +38,7 @@
   "default_agent": "task",
   "agent": {
     "code-review": {
-      "model": "azure-foundry/gpt-5.4-pro",
+      "model": "azure-foundry/gpt-5.3-codex",
       "temperature": 0.3,
       "attachment": true,
       "reasoningEffort": "medium",
@@ -150,7 +150,7 @@
       }
     },
     "research": {
-      "model": "azure-foundry/gpt-5.4-pro",
+      "model": "azure-foundry/gpt-5.3-codex",
       "temperature": 0.3,
       "reasoningEffort": "medium",
       "attachment": true,
@@ -191,7 +191,7 @@
       }
     },
     "task": {
-      "model": "azure-foundry/gpt-5.4-pro",
+      "model": "azure-foundry/gpt-5.3-codex",
       "temperature": 0.3,
       "reasoningEffort": "medium",
       "attachment": true,
