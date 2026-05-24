@@ -583,9 +583,11 @@ export class SandboxStack extends cdk.Stack {
     // Orchestrator Fargate Service (with Cloud Map)
     // ========================================
     const orchestratorDnsName = 'orchestrator';
-    const orchestratorService = new ecs.FargateService(this, 'OrchestratorService', {
+    // Intentionally shifted construct/service identity once to force CloudFormation
+    // to create a fresh ECS+CloudMap registration path if prior child resources drifted.
+    const orchestratorService = new ecs.FargateService(this, 'OrchestratorServiceV2', {
       cluster,
-      serviceName: `${namePrefix}-sandbox-orchestrator`,
+      serviceName: `${namePrefix}-sandbox-orchestrator-v2`,
       taskDefinition: orchestratorTaskDef,
       circuitBreaker: { rollback: true },
       desiredCount: 1,
