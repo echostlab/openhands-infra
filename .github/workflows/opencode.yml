@@ -424,7 +424,7 @@ jobs:
           AZURE_RESOURCE_NAME: "openslab-resource"
         with:
           model: ${{ needs.detect-trigger.outputs.model }}
-          agent: ${{ needs.detect-trigger.outputs.agent != '' && needs.detect-trigger.outputs.agent || null }}
+          agent: task
           variant: ${{ needs.detect-trigger.outputs.variant != '' && needs.detect-trigger.outputs.variant || null }}
           share: ${{ needs.detect-trigger.outputs.share != '' && needs.detect-trigger.outputs.share || null }}
           prompt: ${{ steps.compose.outputs.prompt }}
