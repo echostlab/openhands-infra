@@ -71,7 +71,7 @@
           "node *": "allow",
           "python3 *": "allow",
           "pip3 *": "allow",
-          "python *": "allow"'
+          "python *": "allow",
           "pip *": "allow",
           "docker *": "allow",
           "*": "allow"
@@ -103,7 +103,7 @@
           "node *": "allow",
           "python3 *": "allow",
           "pip3 *": "allow",
-          "python *": "allow"'
+          "python *": "allow",
           "pip *": "allow",
           "docker *": "allow",
           "*": "allow"
@@ -152,7 +152,7 @@
           "node *": "allow",
           "python3 *": "allow",
           "pip3 *": "allow",
-          "python *": "allow"'
+          "python *": "allow",
           "pip *": "allow",
           "docker *": "allow",
           "*": "allow"
@@ -196,7 +196,7 @@
           "node *": "allow",
           "python3 *": "allow",
           "pip3 *": "allow",
-          "python *": "allow"'
+          "python *": "allow",
           "pip *": "allow",
           "docker *": "allow",
           "*": "allow"
@@ -274,7 +274,7 @@
           "node *": "allow",
           "python3 *": "allow",
           "pip3 *": "allow",
-          "python *": "allow"'
+          "python *": "allow",
           "pip *": "allow",
           "docker *": "allow",
           "*": "allow"
