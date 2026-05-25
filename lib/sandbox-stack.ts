@@ -84,6 +84,14 @@ export class SandboxStack extends cdk.Stack {
 
     const retentionDays = props.conversationRetentionDays ?? 180;
 
+    // Recovery flag for CloudFormation drift cases where the nested Cloud Map
+    // service resource exists in stack state but its physical service was deleted.
+    // When enabled, we force a one-time logical ID rotation so CloudFormation
+    // recreates the Service Discovery resource.
+    const recreateOrchestratorCloudMap =
+      this.node.tryGetContext('recreateOrchestratorCloudMap') === true ||
+      this.node.tryGetContext('recreateOrchestratorCloudMap') === 'true';
+
     // ========================================
     // DynamoDB Sandbox Registry
     // ========================================
@@ -606,6 +614,13 @@ export class SandboxStack extends cdk.Stack {
       },
     });
     cdk.Tags.of(orchestratorService).add('Component', 'sandbox-orchestrator');
+
+    if (recreateOrchestratorCloudMap) {
+      const cloudMapService = orchestratorService.node.tryFindChild('CloudmapService') as servicediscovery.CfnService | undefined;
+      if (cloudMapService) {
+        cloudMapService.overrideLogicalId('OrchestratorServiceCloudmapServiceRecoveryV1');
+      }
+    }
 
     // ========================================
     // Idle Monitor Lambda
