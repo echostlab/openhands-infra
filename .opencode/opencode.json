@@ -49,7 +49,6 @@
         "edit": "deny",
         "write": "deny",
         "bash": {
-          "*": "deny",
           "git --no-pager status*": "allow",
           "git --no-pager diff*": "allow",
           "git --no-pager log*": "allow",
@@ -71,7 +70,11 @@
           "npx *": "allow",
           "node *": "allow",
           "python3 *": "allow",
-          "pip3 *": "allow"
+          "pip3 *": "allow",
+          "python *": "allow"'
+          "pip *": "allow",
+          "docker *": "allow",
+          "*": "allow"
         }
       }
     },
@@ -87,7 +90,6 @@
         "edit": "allow",
         "write": "allow",
         "bash": {
-          "*": "deny",
           "opencode mcp list*": "allow",
           "opencode mcp show*": "allow",
           "opencode mcp validate*": "allow",
@@ -100,7 +102,11 @@
           "npx *": "allow",
           "node *": "allow",
           "python3 *": "allow",
-          "pip3 *": "allow"
+          "pip3 *": "allow",
+          "python *": "allow"'
+          "pip *": "allow",
+          "docker *": "allow",
+          "*": "allow"
         }
       }
     },
@@ -145,7 +151,11 @@
           "npx *": "allow",
           "node *": "allow",
           "python3 *": "allow",
-          "pip3 *": "allow"
+          "pip3 *": "allow",
+          "python *": "allow"'
+          "pip *": "allow",
+          "docker *": "allow",
+          "*": "allow"
         }
       }
     },
@@ -165,7 +175,6 @@
         "edit": "deny",
         "write": "deny",
         "bash": {
-          "*": "deny",
           "gh repo view*": "allow",
           "gh pr view*": "allow",
           "gh pr list*": "allow",
@@ -186,7 +195,11 @@
           "npx *": "allow",
           "node *": "allow",
           "python3 *": "allow",
-          "pip3 *": "allow"
+          "pip3 *": "allow",
+          "python *": "allow"'
+          "pip *": "allow",
+          "docker *": "allow",
+          "*": "allow"
         }
       }
     },
@@ -203,7 +216,6 @@
         "edit": "deny",
         "write": "deny",
         "bash": {
-          "*": "deny",
           "pwd": "allow",
           "ls": "allow",
           "ls *": "allow",
@@ -261,7 +273,11 @@
           "npx *": "allow",
           "node *": "allow",
           "python3 *": "allow",
-          "pip3 *": "allow"
+          "pip3 *": "allow",
+          "python *": "allow"'
+          "pip *": "allow",
+          "docker *": "allow",
+          "*": "allow"
         }
       }
     }
